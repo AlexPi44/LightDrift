@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lightdrift Viewer</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: black; }
+    canvas { display: block; }
+    #info {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      color: white;
+      font-family: sans-serif;
+      z-index: 10;
+    }
+    #filters {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      color: white;
+      font-family: sans-serif;
+      z-index: 10;
+    }
+    label { margin-left: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div id="info">🌌 Lightdrift Cosmic Viewer</div>
+  <div id="filters">
+    <label><input type="checkbox" checked id="filter-stars"> Stars</label>
+    <label><input type="checkbox" checked id="filter-planets"> Planets</label>
+    <label><input type="checkbox" checked id="filter-anomalies"> Anomalies</label>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three';
+    import { OrbitControls } from 'https://cdn.skypack.dev/three/examples/jsm/controls/OrbitControls';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 100000);
+    camera.position.z = 300;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // Load star data
+    fetch('3d_map_data.json')
+      .then(res => res.json())
+      .then(data => {
+        const starGroup = new THREE.Group();
+        data.forEach(obj => {
+          const color = new THREE.Color(obj.color || '#ffffff');
+          const material = new THREE.MeshBasicMaterial({ color });
+          const size = obj.size || 0.5;
+          const geometry = new THREE.SphereGeometry(size, 8, 8);
+          const star = new THREE.Mesh(geometry, material);
+          star.position.set(obj.x, obj.y, obj.z);
+          star.userData = obj;
+          starGroup.add(star);
+        });
+        scene.add(starGroup);
+      });
+
+    // Glow effect placeholder (can enhance later)
+
+    // Filters (just visual toggles for now)
+    function updateFilters() {
+      scene.traverse(obj => {
+        if (obj.isMesh && obj.userData) {
+          const type = obj.userData.type?.toLowerCase();
+          obj.visible =
+            (type === 'star' && document.getElementById('filter-stars').checked) ||
+            (type === 'planet' && document.getElementById('filter-planets').checked) ||
+            (type === 'anomaly' && document.getElementById('filter-anomalies').checked);
+        }
+      });
+    }
+
+    document.querySelectorAll('#filters input').forEach(el => el.addEventListener('change', updateFilters));
+
+    // Handle click/hold interaction
+    let holdTimer = null;
+    let jumpTarget = null;
+
+    renderer.domElement.addEventListener('mousedown', (event) => {
+      const mouse = new THREE.Vector2(
+        (event.clientX / window.innerWidth) * 2 - 1,
+        -(event.clientY / window.innerHeight) * 2 + 1
+      );
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children[0].children);
+
+      if (intersects.length > 0) {
+        jumpTarget = intersects[0].object;
+        holdTimer = setTimeout(() => {
+          camera.position.copy(jumpTarget.position.clone().multiplyScalar(1.1));
+        }, 3000);
+      }
+    });
+
+    renderer.domElement.addEventListener('mouseup', () => {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
